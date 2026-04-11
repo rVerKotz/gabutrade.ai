@@ -17,11 +17,11 @@ Run:
 
 from __future__ import annotations
 
-import asyncio
-import json
-import logging
-import signal
 import sys
+import json
+import signal
+import logging
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 

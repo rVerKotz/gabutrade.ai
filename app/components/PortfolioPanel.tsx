@@ -4,26 +4,33 @@ import { Portfolio } from '@/types/trading';
 
 interface PortfolioProps {
   portfolio: Portfolio;
-  price: number;
+  // Menggunakan objek prices untuk menampung harga dari API (misal: { BTC: 65000, ETH: 3200 })
+  prices: Record<string, number>;
+  // initialCapital sekarang diterima sebagai prop (bisa bersumber dari Payment Gateway atau saldo akun)
+  initialCapital: number;
 }
 
-const ETH_PRICE = 3180;
+export default function PortfolioPanel({ portfolio, prices, initialCapital }: PortfolioProps) {
+  // Mengambil harga terkini dari data API (via props prices)
+  const btcPrice = prices['BTC'] || prices['XBT'] || 0;
+  const ethPrice = prices['ETH'] || 0;
 
-export default function PortfolioPanel({ portfolio, price }: PortfolioProps) {
-  const btcUSD = price * portfolio.BTC;
-  const ethUSD = ETH_PRICE * portfolio.ETH;
+  const btcUSD = btcPrice * portfolio.BTC;
+  const ethUSD = ethPrice * portfolio.ETH;
   const total = portfolio.USD + btcUSD + ethUSD;
-  const pnl = total - 10000;
-  const pnlPct = ((pnl / 10000) * 100).toFixed(2);
+  
+  // Kalkulasi Profit & Loss berdasarkan modal awal yang dinamis
+  const pnl = total - initialCapital;
+  const pnlPct = initialCapital > 0 ? ((pnl / initialCapital) * 100).toFixed(2) : "0.00";
 
   return (
     <div className="side-section">
-      <div className="section-title">Portfolio</div>
+      <div className="section-title">Portofolio</div>
       <div className="portfolio-grid">
         <div className="pf-item">
           <div>
             <div className="pf-coin">USD</div>
-            <div className="pf-amount">Cash</div>
+            <div className="pf-amount">Saldo Tunai</div>
           </div>
           <div className="pf-value">
             ${portfolio.USD.toLocaleString('en-US', { maximumFractionDigits: 2 })}
@@ -39,8 +46,8 @@ export default function PortfolioPanel({ portfolio, price }: PortfolioProps) {
             <div className="pf-value">
               ${btcUSD.toLocaleString('en-US', { maximumFractionDigits: 0 })}
             </div>
-            <div className={`pf-pnl ${btcUSD > 33000 ? 'up' : 'down'}`}>
-              {btcUSD > 33000 ? '▲' : '▼'} {(Math.abs(btcUSD / 33000 - 1) * 100).toFixed(1)}%
+            <div className={`pf-pnl ${portfolio.BTC > 0 ? 'up' : ''}`}>
+              {portfolio.BTC > 0 ? '▲ Posisi Aktif' : 'Kosong'}
             </div>
           </div>
         </div>
@@ -54,27 +61,31 @@ export default function PortfolioPanel({ portfolio, price }: PortfolioProps) {
             <div className="pf-value">
               ${ethUSD.toLocaleString('en-US', { maximumFractionDigits: 0 })}
             </div>
-            <div className="pf-pnl up">▲ 2.1%</div>
+            <div className={`pf-pnl ${portfolio.ETH > 0 ? 'up' : ''}`}>
+              {portfolio.ETH > 0 ? '▲ Posisi Aktif' : 'Kosong'}
+            </div>
           </div>
         </div>
 
         <div
           className="pf-item"
-          style={{ borderColor: pnl >= 0 ? '#00d4aa44' : '#ff4d6d44' }}
+          style={{ 
+            borderColor: pnl >= 0 ? '#00d4aa44' : '#ff4d6d44',
+            background: pnl >= 0 ? 'rgba(0, 212, 170, 0.05)' : 'rgba(255, 77, 109, 0.05)'
+          }}
         >
           <div>
             <div className="pf-coin" style={{ color: 'var(--amber)' }}>
-              TOTAL
+              TOTAL P&L
             </div>
-            <div className="pf-amount">All assets</div>
+            <div className="pf-amount">Modal: ${initialCapital.toLocaleString()}</div>
           </div>
           <div>
-            <div className="pf-value">
-              ${total.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+            <div className="pf-value" style={{ color: pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+              {pnl >= 0 ? '+' : ''}${pnl.toLocaleString('en-US', { maximumFractionDigits: 0 })}
             </div>
             <div className={`pf-pnl ${pnl >= 0 ? 'up' : 'down'}`}>
-              {pnl >= 0 ? '+' : ''}
-              {pnlPct}%
+              {pnl >= 0 ? '▲' : '▼'} {pnlPct}%
             </div>
           </div>
         </div>
@@ -82,4 +93,3 @@ export default function PortfolioPanel({ portfolio, price }: PortfolioProps) {
     </div>
   );
 }
-
