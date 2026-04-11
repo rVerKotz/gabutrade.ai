@@ -3,6 +3,51 @@ export type TradeSource = 'MANUAL' | 'AI-AGENT';
 export type LogType = 'buy' | 'sell' | 'analysis' | 'info';
 export type SignalClass = 'bull' | 'bear' | 'neut';
 
+export interface TradingState {
+  price: number;
+  priceHistory: number[];
+  volumeHistory: number[];
+  prices: Record<string, number>;
+  portfolio: Portfolio;
+  initialCapital: number;
+  tradeLog: Trade[];
+  aiLog: AILogEntry[];
+  aiActive: boolean;
+  isPaper: boolean;
+}
+
+export interface AgentPosition {
+  pair: string;
+  volume: number;
+  entry_price: number;
+  pnl: number;
+}
+
+
+export interface AgentPortfolio {
+  open_positions?: AgentPosition[];
+  total_realized_pnl?: number;
+  recent_trades?: Trade[];
+}
+
+export interface AgentConfig {
+  initial_capital?: number;
+  mode?: 'paper' | 'live';
+}
+
+export interface AgentResponse {
+  status: 'online' | 'idle' | 'offline';
+  thought_process?: string[];
+  prices?: Record<string, number>;
+  portfolio?: AgentPortfolio;
+  config?: AgentConfig;
+}
+
+export interface CheckoutResponse {
+  url?: string;
+  error?: string;
+}
+
 export interface Trade {
   side: TradeSide;
   price: number;

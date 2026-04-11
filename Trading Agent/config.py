@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 # Load .env dari project root
 _PROJECT_ROOT = Path(__file__).parent
-load_dotenv(_PROJECT_ROOT / ".env")
+load_dotenv(_PROJECT_ROOT / ".env.local")
 
 
 @dataclass

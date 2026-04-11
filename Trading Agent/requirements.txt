@@ -1,3 +1,4 @@
 mcp
 openai
 python-dotenv
+fastapi

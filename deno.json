@@ -1,0 +1,8 @@
+{
+  "allowScripts": ["npm:sharp@0.34.5", "npm:unrs-resolver@1.11.1"],
+  "lint": {
+    "rules": {
+      "exclude": ["no-sloppy-imports"]
+    }
+  }
+}

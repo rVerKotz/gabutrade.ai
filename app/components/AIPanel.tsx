@@ -26,24 +26,29 @@ export default function AIPanel({ aiLog, aiActive, onToggleAI, onManualOrder }: 
       </div>
 
       <div className="ai-log">
-        {aiLog.slice(0, 30).map((entry, i) => (
-          <div key={i} className={`log-entry ${entry.type}`}>
-            <span className="log-time">{entry.time}</span>
-            <span className="log-msg">{entry.msg}</span>
-          </div>
-        ))}
+        {aiLog.length === 0 ? (
+          <div className="log-entry info">Menunggu data dari Python...</div>
+        ) : (
+          aiLog.slice(0, 30).map((entry, i) => (
+            <div key={i} className={`log-entry ${entry.type}`}>
+              <span className="log-time">{entry.time}</span>
+              <span className="log-msg">{entry.msg}</span>
+            </div>
+          ))
+        )}
       </div>
 
       <div className="controls">
-        <button className="btn buy-btn" onClick={() => onManualOrder('BUY')}>
+        <button className="btn buy-btn" onClick={() => onManualOrder('BUY')} type="button">
           ▲ BUY
         </button>
-        <button className="btn sell-btn" onClick={() => onManualOrder('SELL')}>
+        <button className="btn sell-btn" onClick={() => onManualOrder('SELL')} type="button">
           ▼ SELL
         </button>
         <button
           className={`btn ai-btn ${aiActive ? 'active' : ''}`}
           onClick={onToggleAI}
+          type="button"
         >
           {aiActive ? '⏹ STOP AI AGENT' : '⚡ START AI AGENT'}
         </button>
@@ -51,4 +56,3 @@ export default function AIPanel({ aiLog, aiActive, onToggleAI, onManualOrder }: 
     </div>
   );
 }
-

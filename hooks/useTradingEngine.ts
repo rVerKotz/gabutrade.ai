@@ -1,222 +1,131 @@
-'use client';
-
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Trade, AILogEntry, Portfolio, TradeSide, rand, clamp, now, getSignals, seedPriceHistory } from '@/types/trading';
+import { useState, useEffect, useCallback } from 'react';
+import { TradingState, TradeSide, AgentPosition, AILogEntry, AgentResponse, CheckoutResponse } from '@/types/trading';
 
 export function useTradingEngine() {
-  const [price, setPrice] = useState(67240);
-  const [priceHistory, setPriceHistory] = useState<number[]>([]);
-  const [volumeHistory, setVolumeHistory] = useState<number[]>([]);
-  const [tradeLog, setTradeLog] = useState<Trade[]>([]);
-  const [aiLog, setAiLog] = useState<AILogEntry[]>([
-    { type: 'info', msg: 'System initialized · Demo mode (no real orders)', time: now() },
-    { type: 'info', msg: 'Press START AI AGENT to activate the trading bot', time: now() },
-  ]);
-  const [portfolio, setPortfolio] = useState<Portfolio>({ USD: 10000, BTC: 0.5, ETH: 3.2 });
-  const [aiActive, setAiActive] = useState(false);
-  const [frame, setFrame] = useState(0);
+  const [state, setState] = useState<TradingState>({
+    price: 0,
+    priceHistory: [],
+    volumeHistory: [],
+    prices: {},
+    portfolio: { USD: 0, BTC: 0, ETH: 0 },
+    initialCapital: 0,
+    tradeLog: [],
+    aiLog: [],
+    aiActive: false,
+    isPaper: true
+  });
 
-  const priceRef = useRef(price);
-  const priceHistoryRef = useRef<number[]>([]);
-  const volumeHistoryRef = useRef<number[]>([]);
-  const portfolioRef = useRef(portfolio);
-  const aiActiveRef = useRef(aiActive);
-  const aiThinkingRef = useRef(false);
-  const frameRef = useRef(0);
+  const syncWithPython = useCallback(async () => {
+    try {
+      const res = await fetch('/api/agent');
+      if (!res.ok) return;
+      
+      const data: AgentResponse = await res.json();
 
-  priceRef.current = price;
-  portfolioRef.current = portfolio;
-  aiActiveRef.current = aiActive;
+      if (data.status) {
+        setState((prev: TradingState): TradingState => {
+          const portfolioData = data.portfolio || {};
+          const marketPrices = data.prices || {};
+          
+          const btcPos = portfolioData.open_positions?.find((pos: AgentPosition) => pos.pair.includes('BTC'))?.volume || 0;
+          const ethPos = portfolioData.open_positions?.find((pos: AgentPosition) => pos.pair.includes('ETH'))?.volume || 0;
 
-  // Seed history on mount
+          const newAiLogs: AILogEntry[] = (data.thought_process || []).map((msg: string) => ({
+            time: msg.match(/\[(.*?)\]/)?.[1] || new Date().toLocaleTimeString(),
+            msg: msg.replace(/\[.*?\]/, '').trim(),
+            type: (msg.includes('BUY') ? 'buy' : msg.includes('SELL') ? 'sell' : 'info')
+          }));
+
+          const currentBtcPrice = marketPrices['BTC'] || marketPrices['XBT'] || prev.price;
+
+          return {
+            ...prev,
+            price: currentBtcPrice,
+            prices: marketPrices,
+            priceHistory: currentBtcPrice > 0 ? [...prev.priceHistory.slice(-59), currentBtcPrice] : prev.priceHistory,
+            volumeHistory: [...prev.volumeHistory.slice(-59), Math.random() * 10], 
+            aiActive: data.status === 'online',
+            aiLog: newAiLogs.length > 0 ? newAiLogs : prev.aiLog,
+            portfolio: {
+              USD: (data.config?.initial_capital || 0) + (portfolioData.total_realized_pnl || 0),
+              BTC: btcPos,
+              ETH: ethPos
+            },
+            initialCapital: data.config?.initial_capital || 0,
+            isPaper: data.config?.mode === 'paper',
+            tradeLog: portfolioData.recent_trades || prev.tradeLog
+          };
+        });
+      }
+    } catch (err) {
+      console.error("Gagal sinkronisasi dengan Python Bridge:", err);
+    }
+  }, []);
+
   useEffect(() => {
-    const { prices, volumes } = seedPriceHistory();
-    priceHistoryRef.current = prices;
-    volumeHistoryRef.current = volumes;
-    setPriceHistory([...prices]);
-    setVolumeHistory([...volumes]);
-    priceRef.current = prices[prices.length - 1];
-    setPrice(prices[prices.length - 1]);
-  }, []);
+    setState((prev: TradingState): TradingState => ({
+      ...prev,
+      aiLog: [{ time: new Date().toLocaleTimeString(), msg: "Sistem: Menunggu sinyal dari Python Bridge...", type: 'info' }]
+    }));
+    syncWithPython();
+    const interval = setInterval(syncWithPython, 3000);
+    return () => clearInterval(interval);
+  }, [syncWithPython]);
 
-  const addAILog = useCallback((type: AILogEntry['type'], msg: string) => {
-    const entry: AILogEntry = { type, msg, time: now() };
-    setAiLog((prev) => [entry, ...prev].slice(0, 80));
-  }, []);
+  const toggleAI = async () => {
+    if (!state.aiActive) {
+      await fetch('/api/agent', { method: 'POST' });
+      setState((prev: TradingState): TradingState => ({ ...prev, aiActive: true }));
+    }
+  };
 
-  const executeTrade = useCallback(
-    (side: TradeSide, p: number, qty: number, source: Trade['source']) => {
-      setPortfolio((prev) => {
-        const next = { ...prev };
-        if (side === 'BUY' && next.USD >= p * qty) {
-          next.USD -= p * qty;
-          next.BTC += qty;
-        }
-        if (side === 'SELL' && next.BTC >= qty) {
-          next.USD += p * qty;
-          next.BTC -= qty;
-        }
-        portfolioRef.current = next;
-        return next;
+  /**
+   * Mendukung deposit manual dengan input detail bank pengirim
+   */
+  const handleDeposit = async (amount: number, userBank: string, userAccountName: string) => {
+    console.log(`[DEPOSIT] Memproses deposit manual $${amount} dari ${userAccountName} (${userBank})...`);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort("Timeout"), 30000); 
+
+    try {
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          amount, 
+          userBank, 
+          userAccountName,
+          userId: 'USER-PRO-01' // ID statis untuk contoh, bisa diganti ID Auth
+        }),
+        signal: controller.signal
       });
 
-      const trade: Trade = { side, price: p, qty, source, time: now() };
-      setTradeLog((prev) => [trade, ...prev].slice(0, 50));
-    },
-    []
-  );
+      clearTimeout(timeoutId);
 
-  const manualOrder = useCallback(
-    (side: TradeSide) => {
-      const p = portfolioRef.current;
-      const qty =
-        side === 'BUY'
-          ? clamp((p.USD / priceRef.current) * 0.1, 0, 0.01)
-          : clamp(p.BTC * 0.1, 0, 0.01);
-      if (qty > 0.0001) {
-        executeTrade(side, priceRef.current, qty, 'MANUAL');
-        addAILog(
-          side === 'BUY' ? 'buy' : 'sell',
-          `Manual ${side} ${qty.toFixed(4)} BTC @ $${priceRef.current.toFixed(0)}`
-        );
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || `Server Error (${response.status})`);
       }
-    },
-    [executeTrade, addAILog]
-  );
 
-  const aiDecide = useCallback(() => {
-    if (!aiActiveRef.current || aiThinkingRef.current) return;
-    aiThinkingRef.current = true;
-
-    const s = getSignals(priceHistoryRef.current, volumeHistoryRef.current, priceRef.current);
-    const thoughts = [
-      `Scanning RSI=${s.rsi.toFixed(0)}, price=$${s.cur.toFixed(0)}`,
-      `EMA20=${s.ema.toFixed(0)} | MACD ${s.macd > 0 ? 'positive ▲' : 'negative ▼'}`,
-      `Bollinger: price is ${
-        s.cur < s.bb_lo
-          ? 'BELOW lower band'
-          : s.cur > s.bb_up
-          ? 'ABOVE upper band'
-          : 'within bands'
-      }`,
-      `Volume ratio: ${s.volRatio.toFixed(2)}x 10-bar average`,
-    ];
-
-    let idx = 0;
-    const thinkTimer = setInterval(() => {
-      if (idx < thoughts.length) {
-        addAILog('analysis', thoughts[idx++]);
-      } else {
-        clearInterval(thinkTimer);
-
-        const bull =
-          (s.rsi < 38 ? 1 : 0) +
-          (s.macd > 0 ? 1 : 0) +
-          (s.cur < s.bb_lo + 80 ? 1 : 0) +
-          (s.cur < s.ema ? 1 : 0);
-        const bear =
-          (s.rsi > 65 ? 1 : 0) +
-          (s.macd < 0 ? 1 : 0) +
-          (s.cur > s.bb_up - 80 ? 1 : 0) +
-          (s.cur > s.ema ? 1 : 0);
-
-        let decision: TradeSide | null = null;
-        let reason = '';
-
-        if (bull >= 3 && portfolioRef.current.USD > 500) {
-          decision = 'BUY';
-          reason = `BUY signal confirmed: ${bull}/4 bullish indicators ✓`;
-        } else if (bear >= 3 && portfolioRef.current.BTC > 0.01) {
-          decision = 'SELL';
-          reason = `SELL signal confirmed: ${bear}/4 bearish indicators ✓`;
-        } else {
-          reason = `HOLD — mixed signals (bull:${bull} bear:${bear}), no action`;
-        }
-
-        addAILog(
-          decision === 'BUY' ? 'buy' : decision === 'SELL' ? 'sell' : 'info',
-          reason
-        );
-
-        if (decision) {
-          const qty =
-            decision === 'BUY'
-              ? clamp((portfolioRef.current.USD / priceRef.current) * 0.25, 0, 0.05)
-              : clamp(portfolioRef.current.BTC * 0.25, 0, 0.05);
-          if (qty > 0.001) {
-            setTimeout(() => {
-              executeTrade(decision!, priceRef.current, qty, 'AI-AGENT');
-              addAILog(
-                decision === 'BUY' ? 'buy' : 'sell',
-                `✓ Executed ${decision} ${qty.toFixed(4)} BTC @ $${priceRef.current.toFixed(0)}`
-              );
-            }, 800);
-          }
-        }
-
-        setTimeout(() => {
-          aiThinkingRef.current = false;
-        }, 2500);
+      return await response.json();
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError' || controller.signal.aborted) {
+        throw new Error('Koneksi ke server terputus. Silakan coba lagi.');
       }
-    }, 450);
-  }, [addAILog, executeTrade]);
+      throw error;
+    }
+  };
 
-  const toggleAI = useCallback(() => {
-    setAiActive((prev) => {
-      const next = !prev;
-      aiActiveRef.current = next;
-      if (next) {
-        addAILog('info', '— AI Agent started · Kraken XBT/USD —');
-        addAILog('info', 'Strategy: RSI-14 + MACD + Bollinger(20,2) + EMA-20');
-        addAILog('info', 'Risk: 25% position sizing per signal');
-      } else {
-        addAILog('info', '— AI Agent stopped —');
-        aiThinkingRef.current = false;
-      }
-      return next;
-    });
-  }, [addAILog]);
-
-  // Price tick
-  useEffect(() => {
-    const tick = () => {
-      const vol = 0.0009;
-      const recent = priceHistoryRef.current.slice(-20);
-      const drift = recent.length > 0 ? (recent[0] - priceRef.current) * 0.002 : 0;
-      let newPrice = priceRef.current + (Math.random() - 0.495) * priceRef.current * vol + drift;
-      newPrice = clamp(newPrice, 58000, 78000);
-
-      priceRef.current = newPrice;
-      priceHistoryRef.current = [...priceHistoryRef.current, newPrice].slice(-300);
-      volumeHistoryRef.current = [...volumeHistoryRef.current, rand(500, 1500)].slice(-300);
-
-      setPrice(newPrice);
-      setPriceHistory([...priceHistoryRef.current]);
-      setVolumeHistory([...volumeHistoryRef.current]);
-
-      frameRef.current++;
-      setFrame(frameRef.current);
-
-      if (frameRef.current % 15 === 0 && aiActiveRef.current) {
-        aiDecide();
-      }
-    };
-
-    const interval = setInterval(tick, 1200);
-    return () => clearInterval(interval);
-  }, [aiDecide]);
+  const manualOrder = (side: TradeSide) => {
+    console.log(`Perintah manual ${side} dikirim ke Kraken via Bridge`);
+  };
 
   return {
-    price,
-    priceHistory,
-    volumeHistory,
-    tradeLog,
-    aiLog,
-    portfolio,
-    aiActive,
-    frame,
-    manualOrder,
+    ...state,
     toggleAI,
+    manualOrder,
+    handleDeposit
   };
 }
-
