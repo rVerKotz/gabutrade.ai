@@ -17,6 +17,7 @@ Run:
 
 from __future__ import annotations
 
+import os
 import sys
 import json
 import signal
@@ -34,8 +35,13 @@ from strategy_llm import StrategyLLM
 
 # ── Paths ─────────────────────────────────────────────────
 
+
 PROJECT_ROOT = Path(__file__).parent
-LOG_DIR = PROJECT_ROOT / "logs"
+if os.getenv("VERCEL"):
+    LOG_DIR = Path("/tmp")
+else:
+    LOG_DIR = PROJECT_ROOT / "logs"
+
 TRADING_LOG_FILE = LOG_DIR / "trading_log.jsonl"
 
 

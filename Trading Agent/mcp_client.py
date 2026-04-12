@@ -48,11 +48,8 @@ class KrakenMCPClient:
         """Open MCP connection to Kraken CLI subprocess."""
         # Use bash wrapper to filter [mcp audit] lines from stderr for cleaner output
         server_params = StdioServerParameters(
-            command="bash",
-            args=[
-                "-c",
-                f"'{self._config.kraken_cli_path}' mcp -s all 2> >(grep -v '\\[mcp audit\\]' >&2)"
-            ],
+            command=self._config.kraken_cli_path,
+            args=["mcp", "-s", "all"],
         )
 
         self._exit_stack = AsyncExitStack()

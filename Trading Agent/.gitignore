@@ -9,9 +9,7 @@ logs/
 
 # Environment secrets
 .env
-
-# Kraken CLI binary
-bin/
+.env.local
 
 # OS
 .DS_Store
