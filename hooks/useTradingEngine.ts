@@ -157,7 +157,7 @@ export function useTradingEngine() {
     syncWithPython();
   };
 
-  const manualOrder = async (side: TradeSide, size: number) => {
+  const manualOrder = async (side: TradeSide, size: number = 0.01) => {
     setState((prev) => ({
       ...prev,
       tradeLog: [{

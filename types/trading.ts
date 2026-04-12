@@ -1,6 +1,6 @@
 export type TradeSide = 'BUY' | 'SELL';
 export type TradeSource = 'MANUAL' | 'AI-AGENT';
-export type LogType = 'buy' | 'sell' | 'analysis' | 'info';
+export type LogType = 'buy' | 'sell' | 'analysis' | 'info' | 'error';
 export type SignalClass = 'bull' | 'bear' | 'neut';
 
 export interface TradingState {
@@ -28,6 +28,7 @@ export interface AgentPortfolio {
   open_positions?: AgentPosition[];
   total_realized_pnl?: number;
   recent_trades?: Trade[];
+  balance?: number;
 }
 
 export interface AgentConfig {
