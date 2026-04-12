@@ -54,6 +54,7 @@ export interface Trade {
   qty: number;
   source: TradeSource;
   time: string;
+  pair?: string;
 }
 
 export interface AILogEntry {
